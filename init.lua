@@ -1,8 +1,9 @@
+-- Mute annoying warnings
+vim.opt.shortmess:append("c") -- Suppress completion messages
+vim.notify = function() end -- Disable notifications entirely
+
 -- Load keymaps
 require('keymaps')
-
--- LSP config 
-require('lsp')
 
 -- nvim-tree 
 require('tree')
@@ -11,43 +12,155 @@ require('tree')
 require('autoclose').setup()
 
 -- Change colorscheme
-vim.cmd('colorscheme solarized')
+vim.cmd([[colorscheme solarized]])
 
--- Basic Neovim settings
-vim.o.number = true                 -- Show line numbers
-vim.o.relativenumber = true         -- Show relative line numbers
-vim.o.clipboard = "unnamedplus"     -- Use system clipboard
-vim.o.tabstop = 4                   -- Number of spaces that a <Tab> counts for
-vim.o.shiftwidth = 4                -- Number of spaces to use for each step of (auto)indent
-vim.o.expandtab = true              -- Convert tabs to spaces
-vim.o.autoindent = true             -- Copy indent from current line when starting a new line
-vim.o.smartindent = true            -- Smart auto-indenting
+-- lualine setup
+require('lualine').setup {
+  options = {
+    theme = 'solarized',
+  },
+}
 
--- Keybindings
-local map = vim.api.nvim_set_keymap
-local opts = { noremap = true, silent = true }
+-- Bootstrap packer.nvim
+local ensure_packer = function()
+  local fn = vim.fn
+  local install_path = fn.stdpath('data') .. '/site/pack/packer/start/packer.nvim'
+  if fn.empty(fn.glob(install_path)) > 0 then
+    fn.system({
+      'git',
+      'clone',
+      '--depth',
+      '1',
+      'https://github.com/wbthomason/packer.nvim',
+      install_path,
+    })
+    vim.cmd([[packadd packer.nvim]])
+    return true
+  end
+  return false
+end
 
--- Save and quit
-map('n', '<C-s>', ':w<CR>', opts)             -- Save with Ctrl+s in normal mode
-map('i', '<C-s>', '<Esc>:w<CR>', opts)        -- Save with Ctrl+s in insert mode
-map('n', '<C-q>', ':q<CR>', opts)             -- Quit with Ctrl+q in normal mode
-map('i', '<C-q>', '<Esc>:q<CR>', opts)        -- Quit with Ctrl+q in insert mode
+local packer_bootstrap = ensure_packer()
 
--- Clipboard copy and paste
-map('v', '<C-c>', '"+y', opts)                -- Copy to system clipboard with Ctrl+c in visual mode
-map('n', '<C-v>', '"+p', opts)                -- Paste from system clipboard with Ctrl+v in normal mode
-map('i', '<C-v>', '<C-r>+', opts)             -- Paste from system clipboard with Ctrl+v in insert mode
+-- Auto-reload Neovim whenever this file is saved
+vim.cmd([[
+  augroup packer_user_config
+    autocmd!
+    autocmd BufWritePost init.lua source <afile> | PackerSync
+  augroup end
+]])
 
--- Optionally, you can install plugins with packer.nvim
--- Example:
-require('packer').startup(function()
-  use 'wbthomason/packer.nvim' -- Plugin manager
-  use 'maxmx03/solarized.nvim' 
-  use 'nvim-treesitter/nvim-treesitter'
+-- Plugin setup
+require('packer').startup(function(use)
+  -- Packer can manage itself
+  use 'wbthomason/packer.nvim'
+  use 'nvim-tree/nvim-tree.lua'
+  use 'm4xshen/autoclose.nvim'
+  use 'maxmx03/solarized.nvim'
+
+  -- LSP and completion
   use 'neovim/nvim-lspconfig'
   use 'williamboman/mason.nvim'
   use 'williamboman/mason-lspconfig.nvim'
-  use 'nvim-tree/nvim-tree.lua'
-  use 'nvim-tree/nvim-web-devicons'
-  use 'm4xshen/autoclose.nvim'
+  use 'hrsh7th/nvim-cmp'
+  use 'hrsh7th/cmp-nvim-lsp'
+  use 'L3MON4D3/LuaSnip'
+  use 'saadparwaiz1/cmp_luasnip'
+
+  -- Treesitter for syntax highlighting
+  use {
+    'nvim-treesitter/nvim-treesitter',
+    run = ':TSUpdate',
+  }
+
+  -- File explorer
+  use {
+    'nvim-tree/nvim-tree.lua',
+    requires = { 'nvim-tree/nvim-web-devicons' },
+  }
+
+  -- Statusline
+  use {
+    'nvim-lualine/lualine.nvim',
+    requires = { 'nvim-tree/nvim-web-devicons', opt = true },
+  }
+
+  -- Git integration
+  use 'lewis6991/gitsigns.nvim'
+
+  -- Colorscheme
+  use 'gruvbox-community/gruvbox'
+
+  -- Sync packer if it's a fresh install
+  if packer_bootstrap then
+    require('packer').sync()
+  end
 end)
+
+-- General settings
+vim.o.number = true
+vim.o.relativenumber = true
+vim.o.tabstop = 4
+vim.o.shiftwidth = 4
+vim.o.expandtab = true
+vim.o.smartindent = true
+vim.o.wrap = false
+vim.o.termguicolors = true
+vim.o.splitbelow = true
+vim.o.splitright = true
+vim.o.ignorecase = true
+vim.o.smartcase = true
+
+-- nvim-tree setup
+require('nvim-tree').setup {}
+
+-- gitsigns setup
+require('gitsigns').setup {}
+
+-- Treesitter configuration
+require('nvim-treesitter.configs').setup {
+  ensure_installed = { "lua", "python", "javascript", "html", "css", "c" },
+  highlight = {
+    enable = true,
+  },
+}
+
+-- LSP settings
+require('mason').setup()
+require('mason-lspconfig').setup {
+  ensure_installed = { 'lua_ls', 'pyright', 'tsserver' },
+}
+local lspconfig = require('lspconfig')
+local on_attach = function(_, bufnr)
+  local opts = { noremap = true, silent = true }
+  vim.api.nvim_buf_set_keymap(bufnr, 'n', 'gd', '<cmd>lua vim.lsp.buf.definition()<CR>', opts)
+end
+
+-- for _, server in ipairs({ 'lua_ls', 'pyright', 'tsserver' }) do
+--   lspconfig[server].setup { on_attach = on_attach }
+-- end
+
+-- nvim-cmp setup
+local cmp = require('cmp')
+cmp.setup({
+  snippet = {
+    expand = function(args)
+      require('luasnip').lsp_expand(args.body)
+    end,
+  },
+  mapping = cmp.mapping.preset.insert({
+    ['<C-b>'] = cmp.mapping.scroll_docs(-4),
+    ['<C-f>'] = cmp.mapping.scroll_docs(4),
+    ['<C-Space>'] = cmp.mapping.complete(),
+    ['<C-e>'] = cmp.mapping.abort(),
+    ['<CR>'] = cmp.mapping.confirm({ select = true }),
+  }),
+  sources = cmp.config.sources({
+    { name = 'nvim_lsp' },
+    { name = 'luasnip' },
+  }),
+})
+
+-- Keybindings
+vim.g.mapleader = ' '
+
